@@ -1,0 +1,941 @@
+<#
+.SYNOPSIS
+    Temp script to run the PMV tasks without importing modules.
+
+.DESCRIPTION 
+    Temporary script to run the PMV. Each function is built in to the script and selected in the executeables. Information is put into a text file as
+    the script runs. 
+    
+.NOTES
+    Author:         Rhys Webb   
+    Reviewed by:    James Hinton
+    Creation Date:  14/04/2021
+#>
+
+#-----------------------------------------------------------[Functions]------------------------------------------------------------
+
+# --------[Overview]-----------
+Function Write-Log {
+    
+    [CmdletBinding()]
+    Param(
+        [Parameter(Mandatory=$True)]
+        [string]
+        $Message,
+
+        [Parameter(Mandatory=$False)]
+        [ValidateSet("Info","Warning","Error","Task","---")]
+        [String]
+        $Level = "Info"
+    )
+    #Log File Info
+    $sLogPath = "D:\PMV\Logging\"
+    $sLogName = "LOG_$(get-date -f yyyy-MM-dd).log"
+    $sLogFile = Join-Path -Path $sLogPath -ChildPath $sLogName
+
+    $Stamp = (Get-Date).toString("yyyy/MM/dd HH:mm:ss")
+    $Line = "$Stamp $Level $Message"
+    $path = Test-Path -Path "D:\PMV\Logging\LOG_$(get-date -f yyyy-MM-dd).log"
+        
+    If($path -eq $True) {
+        Add-Content $sLogFile -Value $Line
+    } Else {
+        Write-Output "Error in Write-Log"
+    }
+}
+
+function Add-Directories {
+
+    Write-Log -Message "Checking directories"   
+    Try{
+        $path = Test-Path -Path "D:\PMV\$(get-date -f yyyy-MM-dd)" 
+            
+        if ($path -eq $false) {
+            Write-Log -Message "Directories returned false" -Level "Warning"
+            Write-Log -Message "Creating directories"
+            New-Item -ItemType "directory" -Path "D:\PMV" -Name $(get-date -f yyyy-MM-dd) 
+            New-Item -ItemType "directory" -Path "D:\PMV\$(get-date -f yyyy-MM-dd)" -Name EventLogs
+            Start-Sleep -s 5
+            Write-Log -Message "Creating files"
+            New-Item -ItemType "file" -Path "D:\PMV\$(get-date -f yyyy-MM-dd)" -Name PMV_$(get-date -f yyyy-MM-dd).txt
+        } else {
+            Write-Log -Message "Check directories" -Level "Warning"    
+        }
+    } Catch {
+        Write-Log -Message "Error in Add-directories" -Level "Error"
+    }
+    Write-Log -Message "Add directories finished successfully"    
+}
+
+function Add-Logs {
+
+    Try{
+        $log = Test-Path -Path "D:\PMV\Logging" 
+
+        if ($log -eq $True) {
+            New-Item -ItemType "file" -Path "D:\PMV\Logging" -Name LOG_$(get-date -f yyyy-MM-dd).log -Force
+            Write-Log -Message "Log details: Logs Created Successfully. All logs should be checked post PMV as some manual tasks can be thrown to the logs for completion."
+            Write-Log -Message "---" -Level "---"
+            Write-Log -Message "Information flags do not require your attention unless troubleshooting issues."
+            Write-Log -Message "Warning flags do not require your attention unless troubleshooting issues."
+            Write-Log -Message "Error flags should be checked post PMV, these flags are thrown when a script has failed."
+            Write-Log -Message "Task flags are manual tasks thrown should an automated task fail. These flags will offer suggestions for ensuring tasks completed automatically in the future."
+            Write-Log -Message "---" -Level "---"
+        } else {
+            throw $_.Exception
+        }
+    } Catch {
+        throw $_.Exception
+    }
+}
+
+Function Clear-EventLogs {
+    
+    Write-Log -Message "Checking System Event Logs have been backed up"
+    Write-Log -Message "Checking Application Event Logs have been backed up"
+    Write-Log -Message "Checking cit1k Event Logs have been backed up"
+    #System logs
+    Try {
+        $system = Test-Path "D:\PMV\$(get-date -f yyyy-MM-dd)\EventLogs\System.evtx"
+        if ($system -eq $True) {
+            Write-Log -Message "Clearing system event logs" -Level "Warning"
+            Clear-EventLog -LogName "System"
+        } else {
+            Write-Log -Message "Check back up files for system event logs"
+        }
+    } catch {
+        Write-Log -Message "Error with Clear-EventLogs" -Level "Error"
+    }
+            
+    #Application logs 
+    Try {
+        $application = Test-Path "D:\PMV\$(get-date -f yyyy-MM-dd)\EventLogs\Application.evtx"
+        if ($application -eq $True) {
+            Write-Log -Message "Cleaing application event logs" -Level "Warning"
+            Clear-EventLog -LogName "Application"
+        } else {
+            Write-Log -Message "Check back up files for application event logs"
+        }
+    } catch {
+        Write-Log -Message "Error with Clear-EventLogs" -Level "Error"
+    }
+
+    #cit1k logs
+    Try {
+        $cit1k = Test-Path "D:\PMV\$(get-date -f yyyy-MM-dd)\EventLogs\cobasIT1000.evtx"
+        if ($cit1k -eq $True) {
+            Write-Log -Message "Clearing cit1k event logs" -Level "Warning"
+            Clear-EventLog -LogName "cobasIT1000"
+            } else {
+                Write-Log -Message "Check back up files for cit1k event logs"
+            }
+        } catch {
+            Write-Log -Message "Error with Clear-EventLogs" -Level "Error"
+        }
+    Write-Log -Message "All logs removed successfully"   
+}
+
+function Get-CacheKeyInfo {
+
+    Write-Log -Message "Checking Cache file path" 
+    $condition = Test-Path -Path "E:\Backup\Licences\Cache.key"
+    If ($condition -eq $True){
+        Try {
+            ((Get-Content -Path "E:\Backup\Licences\Cache.key" -TotalCount 8)[-1]) | Out-File -FilePath "D:\PMV\$(get-date -f yyyy-MM-dd)\PMV_$(get-date -f yyyy-MM-dd).txt" -append -Encoding UTF8
+        } Catch {
+            Write-Log -Message "Unable to obtain licence expiry date" -Level "Error"
+        }
+    } Else {
+        Write-Log -Message "Licence key not found" -Level "Error"
+        Write-Log -Message "Check Cache key file path and ammend" -Level "Task"
+        Write-Log -Message "You will need to manually check if cache licence is valid" -Level "Task"
+        Add-Content -Path "D:\PMV\$(get-date -f yyyy-MM-dd)\ManualTasks_$(get-date -f yyyy-MM-dd).txt" -Value "Check Cache key file path and ammend"
+        Add-Content -Path "D:\PMV\$(get-date -f yyyy-MM-dd)\ManualTasks_$(get-date -f yyyy-MM-dd).txt" -Value "You will need to manually check if cache licence is valid"
+    }
+    Write-Log -Message "Licence date obtained"
+    Write-Log -Message "Check the licence date to confirm this is permanent licence" -Level "Task"
+    Add-Content -Path "D:\PMV\$(get-date -f yyyy-MM-dd)\ManualTasks_$(get-date -f yyyy-MM-dd).txt" -Value "Check the licence date to confirm this is permanent licence"
+}
+
+Function Get-cit1kBackups {
+    
+    Write-Log -Message "Starting script to check back up file paths"
+    $pathBackups = Test-Path -Path "E:\cobasIT1000\Services\Backups"
+        
+    If ($pathBackups -eq $True){
+        Try {
+            Write-Log -Message "Checking total back ups"
+            Get-ChildItem -Path "E:\cobasIT1000\Services\Backups"
+            Write-Log -Message "Purging backups older than 72 hours" -Level "Warning"
+            Get-ChildItem -Path "E:\cobasIT1000\Services\Backups" -Recurse | Where-Object {($_.LastWriteTime -lt (Get-Date).AddDays(-3))} | Remove-Item    
+        } Catch {
+            Write-Log -Message "Error in Get-cit1kBackups" -Level "Error"
+        }
+    } Else {
+        Try {
+            Write-Log -Message "Checking total back ups"
+            Get-ChildItem -Path "D:\cobasIT1000\Services\Backups"
+            Write-Log -Message "Purging backups older than 72 hours" -Level "Warning"
+            Get-ChildItem -Path "D:\cobasIT1000\Services\Backups" -Recurse | Where-Object {($_.LastWriteTime -lt (Get-Date).AddDays(-3))} | Remove-Item
+        } Catch {
+            Write-Log -Message "Error in Get-cit1kBackups" -Level "Error"
+        }  
+    }
+    Write-Log -Message "Back ups successfully Checked"
+}
+
+Function Get-CPUusage {
+
+    Write-Log -Message "Checking CPU usage"
+    try {
+        $CPUAveragePerformance = (GET-COUNTER -Counter "\Processor(_Total)\% Processor Time" -SampleInterval 5 -MaxSamples 36 |Select-Object -ExpandProperty countersamples | Select-Object -ExpandProperty cookedvalue | Measure-Object -Average).average
+        Add-Content -Path "D:\PMV\$(get-date -f yyyy-MM-dd)\PMV_$(get-date -f yyyy-MM-dd).txt" -Value "$CPUAveragePerformance" 
+    } catch {
+        Write-Log -Message "Error with Get-CPUusage" -Level "Error"
+    }
+    Write-Log -Message "CPU usage complete"
+}
+
+Function Get-DatabaseSizes {
+
+    Write-Log -Message "Checking database sizes"
+    try {
+        $ACB = "{0} MB" -f ((Get-ChildItem D:\cobasIT1000\Databases\ACBDATA -Recurse | Measure-Object -Property Length -Sum -ErrorAction Stop).Sum / 1MB)
+        $LOGdata = "{0} MB" -f ((Get-ChildItem D:\cobasIT1000\Databases\LOGDATA -Recurse | Measure-Object -Property Length -Sum -ErrorAction Stop).Sum / 1MB)
+        $HCA = "{0} MB" -f ((Get-ChildItem D:\cobasIT1000\Databases\HCADATA -Recurse | Measure-Object -Property Length -Sum -ErrorAction Stop).Sum / 1MB)
+
+        $OutputObj  = New-Object -Type PSObject
+        $OutputObj | Add-Member -MemberType NoteProperty -Name ACB_Size -Value $ACB
+        $OutputObj | Add-Member -MemberType NoteProperty -Name LOGDATA_Size -Value $LOGdata
+        $OutputObj | Add-Member -MemberType NoteProperty -Name HCA_Size -Value $HCA  
+        $OutputObj | Out-String 
+        Return $OutputObj | Format-Table -Autosize | Out-File -FilePath "D:\PMV\$(get-date -f yyyy-MM-dd)\PMV_$(get-date -f yyyy-MM-dd).txt" -append -Encoding UTF8 
+    } catch {
+        Write-Log -Message "Error with Get-DatabaseSizes" -Level "Error"
+    }
+    Write-Log -Message "Database sizes check complete"
+}
+
+Function Get-DiskData {
+
+    Write-Log -Message "Intitating disk data collection"
+    $path = Test-Path -Path "C:\Windows\WinSxS"
+
+    If ($path -eq $True){
+        Try {
+            Write-Log -Message "Collecting disk information"  
+            Write-Log -Message "Starting disk analysis, this may take some time to complete" -Level "Warning"
+            dism /Online /Cleanup-Image /AnalyzeComponentStore | Format-Table -Autosize | Out-File -FilePath "D:\PMV\$(get-date -f yyyy-MM-dd)\PMV_$(get-date -f yyyy-MM-dd).txt" -append -Encoding UTF8     
+        } Catch {
+            Write-Log -Message "Disk data collection completed successfully" -Level "Error"
+        }
+    } Else {
+        Write-Log -Message "Error in Invoke-DiskCleanUp" -Level "Error"
+    }
+    Write-Log -Message "Disk data collection completed successfully" 
+}
+
+Function Get-DiskMemory {
+
+    Write-Log -Message "Checking disk memory"
+    try {
+        $Mem = Get-CIMInstance -Class Win32_LogicalDisk | Select-Object DeviceID, VolumeName, @{Name = "FreeGB";Expression = {[math]::Round($_.FreeSpace /1gb,2)}}, @{Name = "TotalGB";Expression =  {[math]::Round($_.Size/1gb,2)}} 
+        $Mem1 = $Mem | Format-Table -AutoSize | Out-String 
+        Return $Mem1.trim() | Out-File -FilePath "D:\PMV\$(get-date -f yyyy-MM-dd)\PMV_$(get-date -f yyyy-MM-dd).txt" -append -Encoding UTF8
+    } catch {
+        Write-Log -Message "Error with Get-DiskMemory" -Level "Error"
+    }
+    Write-Log -Message "Disk memory check complete"
+}
+
+Function Get-EventLogs {
+
+    Write-Log -Message "Backing up Event viewer logs"
+    Try {
+        (Get-WmiObject -Class Win32_NTEventlogFile | Where-Object LogfileName -EQ 'System').BackupEventlog("D:\PMV\$(get-date -f yyyy-MM-dd)\EventLogs\System.evtx")
+        (Get-WmiObject -Class Win32_NTEventlogFile | Where-Object LogfileName -EQ 'Application').BackupEventlog("D:\PMV\$(get-date -f yyyy-MM-dd)\EventLogs\Application.evtx")
+        (Get-WmiObject -Class Win32_NTEventlogFile | Where-Object LogfileName -EQ 'cobasIT1000').BackupEventlog("D:\PMV\$(get-date -f yyyy-MM-dd)\EventLogs\cobasIT1000.evtx")
+    } catch {
+        Write-Log -Message "Error with Get-EventLogs" -Level "Error"
+    }  
+    Write-Log -Message "All logs backed up successfully"     
+}
+
+Function Get-InstalledSoftware {
+
+    Write-Log -Message "Checking all current installed software and drivers"
+    Try {
+        $row = Get-ItemProperty HKLM:\Software\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall\* | Select-Object DisplayName, DisplayVersion, Publisher, InstallDate | Where-Object {$_.Publisher -like '*roche*'} | Format-Table -AutoSize | Out-String
+        $row.Trim() | Format-Table -Autosize | Out-File -FilePath "D:\PMV\$(get-date -f yyyy-MM-dd)\PMV_$(get-date -f yyyy-MM-dd).txt" -append -Encoding UTF8 
+    } catch {
+        Write-Log -Message "Error with Get-InstalledSoftware" -Level "Error"
+    }
+    Write-Log -Message "Installed software and drivers check complete"   
+} 
+
+Function Get-PCOMdetails {
+
+    Write-Log -Message "Begining script to pull back PCOM details"
+    $pcomPath = Test-Path -Path "E:\PCOM\LOG"
+    $pcomDetails = (Get-Content -path 'C:\Program Files (x86)\PCommunicator\PCommunicator.exe.config' -TotalCount 434)[-1] 
+
+    If ($pcomPath -eq $True){
+        Try {
+            Write-Log -Message "Removing PCOM log files greater than 3 days old" -Level "Warning"
+            Get-ChildItem -Path "E:\PCOM\LOG" *.log | Where-Object {($_.LastWriteTime -lt (Get-Date).AddDays(-3))} | Remove-Item
+            Write-Log -Message "Checking LOG folder size"
+            $logSize = "{0} GB" -f ((Get-ChildItem E:\PCOM\LOGS -Recurse | Measure-Object -Property Length -Sum -ErrorAction Stop).Sum / 1GB)
+            $outputObj  = New-Object -Type PSObject
+            $outputObj | Add-Member -MemberType NoteProperty -Name ACB_Size -Value $logSize
+            $outputObj | Add-Member -MemberType NoteProperty -Name PCOM -Value $pcom
+            $outputObj | Add-Member -MemberType NoteProperty -Name PCOM_Details -Value $pcomDetails
+        } Catch {
+            Write-Log -Message "Error in Get-PCOMdetails" -Level "Error"
+        }
+    } Else {
+        Try {
+            Write-Log -Message "PCOM logs not stored on E: drive"
+            Write-Log -Message "Removing PCOM log files greater than 3 days old" -Level "Warning"
+            Get-ChildItem -Path "D:\PCOM\LOG" *.log | Where-Object {($_.LastWriteTime -lt (Get-Date).AddDays(-3))} | Remove-Item
+            Write-Log -Message "Checking LOG folder size"
+            $logSize = "{0} GB" -f ((Get-ChildItem D:\PCOM\LOGS -Recurse | Measure-Object -Property Length -Sum -ErrorAction Stop).Sum / 1GB)
+            $outputObj  = New-Object -Type PSObject
+            $outputObj | Add-Member -MemberType NoteProperty -Name ACB_Size -Value $logSize
+            $outputObj | Add-Member -MemberType NoteProperty -Name PCOM -Value $pcom
+            $outputObj | Add-Member -MemberType NoteProperty -Name PCOM_Details -Value $pcomDetails
+        } Catch {
+            Write-Log -Message "Error in Get-PCOMdetails" -Level "Error"
+        }
+    }
+    Write-Log -Message "Get-PCOMdetails scipt completed successfully"
+}
+
+Function Get-RAMusage {
+
+    Write-Log -Message "Checking RAM usage"
+    Try {
+        $RAMfree = Get-CIMInstance -Class Win32_OperatingSystem | Select-Object @{Name = "Free_Memory";Expression = {[math]::Round($_.FreePhysicalMemory /1mb,2)}}, @{Name = "Total_Memory";Expression = {[math]::Round($_.TotalVisibleMemorySize /1mb,2)}} | Format-Table -AutoSize | Out-String
+        $RAMfree.Trim() | Format-Table -Autosize | Out-File -FilePath "D:\PMV\$(get-date -f yyyy-MM-dd)\PMV_$(get-date -f yyyy-MM-dd).txt" -append -Encoding UTF8 
+    } catch {
+        Write-Log -Message "Error with Get-RAMusage" -Level "Error"
+    }
+    Write-Log -Message "RAM usage complete"
+}
+
+Function Get-SIPTool {
+    
+    Write-Log -Message "Checking SIP tool installation"
+    $sipTool = Test-Path -Path "D:\Scripts\SIP\CustomerProductInventoryCobasIT1000.vbe"
+    
+    If ($sipTool -eq $True){
+        Write-Log -Message "SIP tool installed"
+        Write-Log -Message "Checking SIP XML config installation"
+        $sipXML = Test-Path -Path "D:\Scripts\SIP\CustomerProductInventoryCobasIT1000Config.xml"
+        
+        If ($sipXML -eq $True){
+            Write-Log -Message "SIP XML config installed"
+            Write-Log -Message "Checking SIP XML config document"
+               
+            (Get-Content -path 'D:\Scripts\SIP\CustomerProductInventoryCobasIT1000Config.xml' -TotalCount 1)[-1] | Out-File -FilePath "D:\PMV\$(get-date -f yyyy-MM-dd)\PMV_$(get-date -f yyyy-MM-dd).txt" -append -Encoding UTF8
+            (Get-Content -path 'D:\Scripts\SIP\CustomerProductInventoryCobasIT1000Config.xml' -TotalCount 3)[-1] | Out-File -FilePath "D:\PMV\$(get-date -f yyyy-MM-dd)\PMV_$(get-date -f yyyy-MM-dd).txt" -append -Encoding UTF8
+            (Get-Content -path 'D:\Scripts\SIP\CustomerProductInventoryCobasIT1000Config.xml' -TotalCount 16)[-1] | Out-File -FilePath "D:\PMV\$(get-date -f yyyy-MM-dd)\PMV_$(get-date -f yyyy-MM-dd).txt" -append -Encoding UTF8
+        } Else {
+            Write-Log -Message "SIP needs updating" -Level "Error"
+        }
+    } Else {
+        Write-Log -Message "SIP needs updating" -Level "Error"
+    }
+    Write-Log -Message "SIP and SIP XML config installed. Checks completed"
+    Write-Log -Message "Checks completed"
+}
+# --------[Overview]-----------
+
+
+# --------[SQL]-----------
+function Get-SQLData {
+ 
+    param (
+        $query
+    )
+    try {
+        $sqlConn = New-Object System.Data.ODBC.ODBCConnection
+        $sqlConn.connectionstring = "DRIVER={InterSystems ODBC};Server=localhost;Database=ACB;UID=**;PWD=**;" #Password and UID removed for secruity purposes.
+        $sqlConn.Open()
+
+        $cmd = New-Object System.Data.ODBC.ODBCCommand($query, $sqlConn)
+        $table = new-object System.Data.DataTable
+        $table.Load($cmd.ExecuteReader())
+        $sqlConn.Close()
+
+        $response = $table
+    
+    } catch {
+        throw $_.Exception
+    }
+    return $response
+}
+
+function Get-SQLDataHCA {
+ 
+    param (
+        $query
+    )
+    try {
+        $sqlConn = New-Object System.Data.ODBC.ODBCConnection
+        $sqlConn.connectionstring = "DRIVER={InterSystems ODBC};Server=localhost;Database=HCA;UID=**;PWD=**;" #Password and UID removed for secruity purposes.
+        $sqlConn.Open()
+
+        $cmd = New-Object System.Data.ODBC.ODBCCommand($query, $sqlConn)
+        $table = new-object System.Data.DataTable
+        $table.Load($cmd.ExecuteReader())
+        $sqlConn.Close()
+
+        $response = $table
+    } catch {
+        throw $_.Exception
+    }
+    return $response
+}
+
+function Get-ActiveUsers {
+
+    Write-Log -Message "Checking active users"
+    try {
+        $data = Get-SQLData("SELECT COUNT(id) 
+        FROM Data_sys.tsysUsers WHERE Status = 1")
+        $data1 = $data | Format-Table -HideTableHeaders | Out-String 
+        Return $data1.trim() | Out-File -FilePath "D:\PMV\$(get-date -f yyyy-MM-dd)\PMV_$(get-date -f yyyy-MM-dd).txt" -append -Encoding UTF8
+    } catch {
+        Write-Log -Message "Error with Get-ActiveUsers" -Level "Error"
+    }
+    Write-Log -Message "Active users check successful"
+}
+
+Function Get-ADTandResultFeeds {
+
+    Write-Log -Message "Checking for active ADT and result feeds" 
+    Try {
+        $data = Get-SQLDataHCA ("SELECT 
+        Cha.INOUTDirection, Hos.ChannelDescription, Count (Hos.ChannelDescription) 
+        from Data_host.thcaUsedProtocolConf AS Pro 
+        LEFT JOIN Data_host.thcaUsedChannel AS Cha 
+        ON Pro.rhcaUsedChannel = Cha.ID 
+        LEFT JOIN Data_host.thcaChannels AS Hos 
+        ON Cha.rhcaChannels = Hos.ID 
+        WHERE (Pro.Status = 1 AND Cha.rhcaChannels = 2) OR (Pro.Status = 1 AND Cha.rhcaChannels = 1) 
+        Group BY ChannelDescription") 
+        $data1 = $data | Format-Table -AutoSize | Out-String 
+        Return $data1.trim() | Out-File -FilePath "D:\PMV\$(get-date -f yyyy-MM-dd)\PMV_$(get-date -f yyyy-MM-dd).txt" -append -Encoding UTF8
+    } Catch {
+        Write-Log -Message "Unable to obtain ADT/result feed information" -Level "Error"
+        Write-Log -Message "Check for active ADT and result feeds" -Level "Task"
+        Add-Content -Path "D:\PMV\$(get-date -f yyyy-MM-dd)\ManualTasks_$(get-date -f yyyy-MM-dd).txt" -Value "Check for active ADT and result feeds"
+    }
+    Write-Log -Message "ADT and result feed collection complete" 
+}
+
+Function Get-ADTMessages {
+
+    Write-Log -Message "Checking for incoming ADT messages"
+    Try {
+        $data = Get-SQLDataHCA ("SELECT TOP 10
+        CreationDate, MessageType, Sender, TS_TSUser
+        FROM Data_mbr.tMessagesQueueIN
+        WHERE MessageBodyText LIKE '%ADT^A%'
+        Order BY CreationDate DESC")
+        $data1 = $data | Format-Table -AutoSize | Out-String 
+        Return $data1.trim() | Out-File -FilePath "D:\PMV\$(get-date -f yyyy-MM-dd)\PMV_$(get-date -f yyyy-MM-dd).txt" -append -Encoding UTF8
+    } Catch {
+        Write-Log -Message "Unable to obtain most recent ADT messages" -level "Error"
+        Write-Log -Message "This can be ignored if an ADT feed is not configured in the application"
+        Write-Log -Message "Check that ADT messages are being received" -Level "Task"
+        Add-Content -Path "D:\PMV\$(get-date -f yyyy-MM-dd)\ManualTasks_$(get-date -f yyyy-MM-dd).txt" -Value "Check that ADT messages are being received"
+    }
+    Write-Log -Message "Last 10 ADT messages obtained"
+    Write-Log -Message "Review data and time of ADT messages to confirm recent" -Level "Task"
+}
+
+function Get-ExpiredQC_Test {
+
+    Write-Log -Message "Checking expired QC and Test lots"
+    try {
+        $data = Get-SQLData("SELECT QcMat.strType as MaterialType, COUNT (QcMat.strType) AS Total_Expired
+        FROM Data_QC.tQcMaterialLot AS QcMatLot
+        LEFT JOIN Data_QC.tQcMaterial AS QcMat
+        ON QcMatLot.Material = QcMat.ID 
+        WHERE QcMatLot.intStatusExpiration = 1 AND QcMatLot.blnActive = 1
+        GROUP BY QcMat.strType")
+        $data1 = $data | Format-Table -AutoSize | Out-String 
+        Return $data1.trim() | Out-File -FilePath "D:\PMV\$(get-date -f yyyy-MM-dd)\PMV_$(get-date -f yyyy-MM-dd).txt" -append -Encoding UTF8
+    } catch {
+        Write-Log -Message "Error with Get-ExpiredQC_Test" -Level "Error"
+    }
+    Write-Log -Message "Expired QC and Test lots check successful"
+}
+
+function Get-FirmwareVersion {
+
+    Write-Log -Message "Checking firmware versions"   
+    try {
+        $data = Get-SQLData("SELECT FirmwareVersion, rInstrumentTypes, COUNT (FirmwareVersion) AS Total
+        FROM Data_ins.tInstruments
+        WHERE FirmwareVersion IS NOT NULL
+        GROUP BY FirmwareVersion")
+        $data1 = $data | Format-Table -AutoSize | Out-String 
+        Return $data1.trim() | Out-File -FilePath "D:\PMV\$(get-date -f yyyy-MM-dd)\PMV_$(get-date -f yyyy-MM-dd).txt" -append -Encoding UTF8
+    } catch {
+        Write-Log -Message "Error with Get-FirmwareVersion" -Level "Error"
+    }
+    Write-Log -Message "Firmware versions check successful"
+}
+
+Function Get-IncomingResults {
+
+    Write-Log -Message "Checking most recent results received"
+    Try {
+        $data = Get-SQLData ("SELECT TOP 10
+        ID, CreationDate, MessageType, Sender, TS_TSUser
+        FROM Data_mbr.tMessagesQueueIN
+        WHERE MessageType = 'Results'
+        And Sender = 'ACB'
+        Order BY CreationDate DESC") 
+        $data1 = $data | Format-Table -AutoSize | Out-String 
+        Return $data1.trim() | Out-File -FilePath "D:\PMV\$(get-date -f yyyy-MM-dd)\PMV_$(get-date -f yyyy-MM-dd).txt" -append -Encoding UTF8    
+    } Catch {
+        Write-Log -Message "Unable to obtain most recent results" -Level "Error"
+        Write-Log -Message "Check results are being received and processed" -Level "Task"
+        Add-Content -Path "D:\PMV\$(get-date -f yyyy-MM-dd)\ManualTasks_$(get-date -f yyyy-MM-dd).txt" -Value "Check results are being received and processed"
+    }
+    Write-Log -Message "Last 10 test results collected"
+    Write-Log -Message "Review data and time of result received to confirm recent" -Level "Task"
+}
+
+function Get-InstrumentConnectivity {
+
+    Write-Log -Message "Checking instrument connectivity"
+    try {
+        $data = Get-SQLData("SELECT tbIns.rInstrumentTypes, COUNT (tbIns.rInstrumentTypes) AS Total_Connected_Last_24hr
+        FROM Data_ins.tInstruments AS tbIns
+        LEFT JOIN Data_ins.tInstrumentStatus AS tbInsStat
+        ON tbIns.ID = tbInsStat.ID
+        WHERE tbInsStat.LastConnectionDate >= CAST (DATEADD(day,-1, GETDATE())AS Date)
+        GROUP BY tbIns.rInstrumentTypes")
+        $data1 = $data | Format-Table -AutoSize | Out-String 
+        Return $data1.trim() | Out-File -FilePath "D:\PMV\$(get-date -f yyyy-MM-dd)\PMV_$(get-date -f yyyy-MM-dd).txt" -append -Encoding UTF8
+    } catch {
+        Write-Log -Message "Error with Get-InstrumentConnectivity" -Level "Error"
+    }
+    Write-Log -Message "Instrument connectivity check successful"
+}
+
+function Get-InstrumentEvents {
+
+    Write-Log -Message "Checking instrument events"
+    try {
+        $data = Get-SQLData("SELECT COUNT(id) AS UnacknowledgedInsEvents 
+        FROM Data_ins.tInstrumentEvents
+        WHERE AcknowledgeDate IS NULL")
+        $data1 = $data | Format-Table -AutoSize | Out-String 
+        Return $data1.trim() | Out-File -FilePath "D:\PMV\$(get-date -f yyyy-MM-dd)\PMV_$(get-date -f yyyy-MM-dd).txt" -append -Encoding UTF8
+    } catch {
+        Write-Log -Message "Error with Get-InstrumentEvents" -Level "Error"
+    }
+    Write-Log -Message "Instrument events successful"
+}
+
+function Get-MBMerrorsACB {
+
+    Write-Log -Message "Checking message broker monitor for errors in ACB"
+    try {
+        $data = Get-SQLData("SELECT COUNT(id) AS ACB_TotalErrors
+        FROM Data_mbr.tMessagesReceiversIN 
+        WHERE CreationDate >= CAST (DATEADD(day,-3, GETDATE())AS Date) AND Opened = 'Error'")
+        $data1 = $data | Format-Table -AutoSize | Out-String 
+        Return $data1.trim() | Out-File -FilePath "D:\PMV\$(get-date -f yyyy-MM-dd)\PMV_$(get-date -f yyyy-MM-dd).txt" -append -Encoding UTF8
+    } catch {
+        Write-Log -Message "Error with Get-MBMerrorsACB" -Level "Error"
+    }
+    Write-Log -Message "Message broker monitor check for errors in ACB successful"
+}
+
+function Get-MBMerrorsHCA {
+
+    Write-Log -Message "Checking message broker monitor for errors in HCA"
+    try {
+        $data = Get-SQLData("SELECT COUNT(id) AS HCA_TotalErrors
+        FROM Data_mbr.tMessagesReceiversIN 
+        WHERE CreationDate >= CAST (DATEADD(day,-3, GETDATE())AS Date) AND Opened = 'Error'")
+        $data1 = $data | Format-Table -AutoSize | Out-String 
+        Return $data1.trim() | Out-File -FilePath "D:\PMV\$(get-date -f yyyy-MM-dd)\PMV_$(get-date -f yyyy-MM-dd).txt" -append -Encoding UTF8
+    } catch {
+        Write-Log -Message "Error with Get-MBMerrorsHCA" -Level "Error"
+    }
+    Write-Log -Message "Message broker monitor check for errors in HCA successful"
+}
+
+Function Get-OutGoingResults {
+
+    Write-Log -Message "Checking most recent results sent to HIS/LIS"
+    Try {
+        $data = Get-SQLDataHCA ("SELECT TOP 10
+        CreationDate AS ResultSent, MessageType, Opened AS Processed
+        FROM Data_mbr.tMessagesReceiversIN
+        WHERE MessageType = 'HCAQUEUEOUT'
+        Order BY CreationDate DESC")
+        $data1 = $data | Format-Table -AutoSize | Out-String 
+        Return $data1.trim() | Out-File -FilePath "D:\PMV\$(get-date -f yyyy-MM-dd)\PMV_$(get-date -f yyyy-MM-dd).txt" -append -Encoding UTF8
+    } Catch {
+        Write-Log -Message "Unable to obtain most recent sent to HIS/LIS" -Level "Error"
+        Write-Log -Message "This can be ignored if result feed is not configured in the application"
+        Write-Log -Message "Check results are being sent to HIS/LIS" -Level "Task"
+        Add-Content -Path "D:\PMV\$(get-date -f yyyy-MM-dd)\ManualTasks_$(get-date -f yyyy-MM-dd).txt" -Value "Check results are being sent to HIS/LIS"
+    }
+}
+
+function Get-PatientResults {
+
+    Write-Log -Message "Checking patient results" 
+    try {
+        $data = Get-SQLData ("SELECT COUNT(id) AS Patient_results FROM Data_results.tResults")
+        $data1 = $data | Format-Table -AutoSize | Out-String 
+        Return $data1.trim() | Out-File -FilePath "D:\PMV\$(get-date -f yyyy-MM-dd)\PMV_$(get-date -f yyyy-MM-dd).txt" -append -Encoding UTF8
+    } catch {
+        Write-Log -Message "Error with Get-PatientResults" -Level "Error"
+    }
+    Write-Log -Message "Patient results check successful"
+}
+
+Function Get-RebuildIndexes {
+
+    Write-Log -Message "Checking when indexes were last rebuilt"
+    Try {
+        $data = Get-SQLData ("SELECT TOP 3
+        dtsAction AS Indexes_Last_Rebuilt
+        FROM iservice_Data.Log
+        WHERE strPageName = 'iservice.iRebuildIndex' AND strAction = 'Rebuild Data.user.tProfiles. Stop tasks. Stop journal'
+        GROUP BY dtsAction
+        ORDER BY dtsAction DESC") 
+        $data1 = $data | Format-Table -AutoSize | Out-String 
+        Return $data1.trim() | Out-File -FilePath "D:\PMV\$(get-date -f yyyy-MM-dd)\PMV_$(get-date -f yyyy-MM-dd).txt" -append -Encoding UTF8
+    } Catch {
+        Write-Log -Message "Unable to obtain when indexes were last rebuilt" -Level "Error"
+        Write-Log -Message "Log into iService and check when indexes were last rebuilt for ACB, HCA and ICA" -Level "Task"
+        Add-Content -Path "D:\PMV\$(get-date -f yyyy-MM-dd)\ManualTasks_$(get-date -f yyyy-MM-dd).txt" -Value "Log into iService and check when indexes were last rebuilt for ACB, HCA and ICA"
+    }
+    Write-Log -Message "When indexes were last rebuilt obtained"
+    Write-Log -Message "Review to confirm that there are 3 outputs, there may be only 2 if ICA is inactive, if less than 2 please check" -Level "Task"
+    Write-Log -Message "Email customer if > 6 months since last performed" -Level "Task"
+    Add-Content -Path "D:\PMV\$(get-date -f yyyy-MM-dd)\ManualTasks_$(get-date -f yyyy-MM-dd).txt" -Value "Email customer if > 6 months since last performed."
+    Add-Content -Path "D:\PMV\$(get-date -f yyyy-MM-dd)\ManualTasks_$(get-date -f yyyy-MM-dd).txt" -Value "Perform rebuild indexes"
+}
+
+Function Get-ResultACK {
+
+    Write-Log -Message "Checking for most recent result acknowledgements"
+    Try {
+        $data = Get-SQLDataHCA ("SELECT TOP 10
+        CreationDate AS ACK_Received, MessageType
+        FROM Data_mbr.tMessagesQueueIN
+        WHERE MessageBodyText LIKE '%ACK^R%'
+        Order BY CreationDate DESC")    
+        $data1 = $data | Format-Table -AutoSize | Out-String 
+        Return $data1.trim() | Out-File -FilePath "D:\PMV\$(get-date -f yyyy-MM-dd)\PMV_$(get-date -f yyyy-MM-dd).txt" -append -Encoding UTF8
+    } Catch {
+        Write-Log -Message "Unable to obtain most recent result acknowledgements" -Level "Error"
+        Write-Log -Message "This can be ignored if result ACK is not configured in the application"
+        Write-Log -Message "Check that result acknowledgements are being received" -Level "Task"
+        Add-Content -Path "D:\PMV\$(get-date -f yyyy-MM-dd)\ManualTasks_$(get-date -f yyyy-MM-dd).txt" -Value "Check that result acknowledgements are being received"
+    }
+    Write-Log -Message "Last 10 test result acknowledgements obtained"
+    Write-Log -Message "Review data and time of acknowledgements to confirm recent" -Level "Task"
+}
+
+Function Get-Tasks {
+
+    Write-Log -Message "Checking for enabled automated tasks"
+    Try {
+        $data = Get-SQLData ("SELECT 
+        ProcessName, LastDateStatus AS Last_Run
+        FROM Data_sys.tsysAutomaticProcess 
+        WHERE Status = 1 AND LastDateStatus Is NOT NULL")
+        $data1 = $data | Format-Table -AutoSize | Out-String 
+        Return $data1.trim() | Out-File -FilePath "D:\PMV\$(get-date -f yyyy-MM-dd)\PMV_$(get-date -f yyyy-MM-dd).txt" -append -Encoding UTF8
+    } Catch {
+        Write-Log -Message "Unable to obtain automated tasks" -Level "Error"
+        Write-Log -Message "Log into management portal and check tasks are running as expected" -Level "Task"
+        Add-Content -Path "D:\PMV\$(get-date -f yyyy-MM-dd)\ManualTasks_$(get-date -f yyyy-MM-dd).txt" -Value "Log into management portal and check tasks are running as expected"
+    }
+    Write-Log -Message "Enabled automatic tasks obtained"
+    Write-Log -Message "Review the Last_Run column. If task has not run in the last 12 hours, this indicates the task is not running and will need to be checked" -Level "Task"
+    Add-Content -Path "D:\PMV\$(get-date -f yyyy-MM-dd)\ManualTasks_$(get-date -f yyyy-MM-dd).txt" -Value "Review the Last_Run column"
+}
+
+Function Get-TuneTable {
+
+    Write-Log -Message "Checking when tune tables ACB was last performed"
+    Try {
+        $data = Get-SQLData ("SELECT TOP 1
+        dtsAction AS Last_Performed, strPageName AS Action_Performed
+        FROM iservice_Data.Log
+        WHERE strPageName = 'iservice.iTuneTable'
+        ORDER BY dtsAction DESC")
+        $data1 = $data | Format-Table -AutoSize | Out-String 
+        Return $data1.trim() | Out-File -FilePath "D:\PMV\$(get-date -f yyyy-MM-dd)\PMV_$(get-date -f yyyy-MM-dd).txt" -append -Encoding UTF8
+    } Catch {
+        Write-Log -Message "Unable to obtain when tune tables ACB was last performed" -Level "Error"
+        Write-Log -Message "Log into iService and check when tune tables ACB last performed" -Level "Task"
+        Add-Content -Path "D:\PMV\$(get-date -f yyyy-MM-dd)\ManualTasks_$(get-date -f yyyy-MM-dd).txt" -Value "Log into iService and check when tune tables ACB last performed"
+    }
+    Write-Log -Message "When tune tables ACB was last performed obtained"
+    Write-Log -Message "Email customer if > 6 months since last performed" -Level "Task"
+    Add-Content -Path "D:\PMV\$(get-date -f yyyy-MM-dd)\ManualTasks_$(get-date -f yyyy-MM-dd).txt" -Value "Email customer if > 6 months since last performed"
+    Add-Content -Path "D:\PMV\$(get-date -f yyyy-MM-dd)\ManualTasks_$(get-date -f yyyy-MM-dd).txt" -Value "Perform tune tables"
+}
+
+function Get-UnreviewedQCresults {
+
+    Write-Log -Message "Checking unreviewed QC results"
+    try {
+        $data = Get-SQLData ("SELECT COUNT(id) AS UnreviewedQC
+        FROM Data_QC.tQcResult
+        WHERE blnAccepted = 0")
+        $data1 = $data | Format-Table -AutoSize | Out-String 
+        Return $data1.trim() | Out-File -FilePath "D:\PMV\$(get-date -f yyyy-MM-dd)\PMV_$(get-date -f yyyy-MM-dd).txt" -append -Encoding UTF8
+    } catch {
+        Write-Log -Message "Error with Get-UnreviewedQCresults" -Level "Error"
+    }
+    Write-Log -Message "Unreviewed QC results check successful"
+}
+
+function Get-UnreviewedTestResults {
+
+    Write-Log -Message "Checking unreviewed test results"
+    try {
+        $data = Get-SQLData ("SELECT COUNT(id) AS UnreviewedTests
+        FROM Data_results.tResults
+        WHERE ValStatus IN ('5', '10')")
+        $data1 = $data | Format-Table -AutoSize | Out-String 
+        Return $data1.trim() | Out-File -FilePath "D:\PMV\$(get-date -f yyyy-MM-dd)\PMV_$(get-date -f yyyy-MM-dd).txt" -append -Encoding UTF8
+    } catch {
+        Write-Log -Message "Error with Get-UnreviewedTestResults" -Level "Error"
+    }
+    Write-Log -Message "Unreviewed test results successful"
+}
+
+function Get-UnsyncedInstruments {
+
+    Write-Log -Message "Checking instrument communications greater than 30 days"  
+    try {
+        $data = Get-SQLData ("SELECT COUNT(id) AS Total_Instruments_Unsyncd
+        FROM Data_ins.tInstrumentStatus
+        WHERE LastConnectionDate <= CAST (DATEADD(day,-30, GETDATE())AS Date)")
+        $data1 = $data | Format-Table -AutoSize | Out-String 
+        Return $data1.trim() | Out-File -FilePath "D:\PMV\$(get-date -f yyyy-MM-dd)\PMV_$(get-date -f yyyy-MM-dd).txt" -append -Encoding UTF8
+    } catch {
+        Write-Log -Message "Error with Get-UnsyncedInstruments" -Level "Error"
+    }
+    Write-Log -Message "Unsynced instruments successful"
+}
+
+function Get-CustomerData {
+
+    Write-Log -Message "Checking instrument communications greater than 30 days"  
+    try {
+        $data8 = Get-SQLData("SELECT 
+        CustomerName
+        FROM Data_lic.tlicCustomer")
+        $data9 = $data8 | Format-Table -HideTableHeaders | Out-String 
+        Return $data9.trim() | Out-File -FilePath "D:\PMV\$(get-date -f yyyy-MM-dd)\PMV_$(get-date -f yyyy-MM-dd).txt" -append -Encoding UTF8
+    } catch {
+        Write-Log -Message "Error with Get-CustomerData" -Level "Error"
+    }
+}
+# --------[SQL]-----------
+
+#-----------------------------------------------------------[Executions]------------------------------------------------------------
+
+# Running as admin ---vvv---
+Try {
+    $currentUser = New-Object Security.Principal.WindowsPrincipal $([Security.Principal.WindowsIdentity]::GetCurrent())
+    $testadmin = $currentUser.IsInRole([Security.Principal.WindowsBuiltinRole]::Administrator)
+    
+    If ($testadmin -eq $false) {
+        Start-Process powershell.exe -Verb RunAs -ArgumentList ('-noprofile -noexit -file "{0}" -elevated' -f ($myinvocation.MyCommand.Definition))
+    exit $LASTEXITCODE
+    }    
+} Catch {
+    throw $_.Exception
+}
+# Running as admin ---^^^---
+
+# Beginning PMV tasks - Create the logs, directories and Collect customer data 
+Add-Logs
+Add-directories
+
+# PMV output files: PMV. 
+Add-Content -Path "D:\PMV\$(get-date -f yyyy-MM-dd)\PMV_$(get-date -f yyyy-MM-dd).txt" -Value " "
+Add-Content -Path "D:\PMV\$(get-date -f yyyy-MM-dd)\PMV_$(get-date -f yyyy-MM-dd).txt" -Value "-------------------------------------------"
+Add-Content -Path "D:\PMV\$(get-date -f yyyy-MM-dd)\PMV_$(get-date -f yyyy-MM-dd).txt" -Value " "
+Add-Content -Path "D:\PMV\$(get-date -f yyyy-MM-dd)\PMV_$(get-date -f yyyy-MM-dd).txt" -Value "PMV details $(get-date -f yyyy-MM-dd)"
+Add-Content -Path "D:\PMV\$(get-date -f yyyy-MM-dd)\PMV_$(get-date -f yyyy-MM-dd).txt" -Value "Customer details:"
+Get-CustomerData
+Add-Content -Path "D:\PMV\$(get-date -f yyyy-MM-dd)\PMV_$(get-date -f yyyy-MM-dd).txt" -Value " "
+Add-Content -Path "D:\PMV\$(get-date -f yyyy-MM-dd)\PMV_$(get-date -f yyyy-MM-dd).txt" -Value "Remember to review logs for errors"
+Add-Content -Path "D:\PMV\$(get-date -f yyyy-MM-dd)\PMV_$(get-date -f yyyy-MM-dd).txt" -Value "Remember to check tasks file"
+Add-Content -Path "D:\PMV\$(get-date -f yyyy-MM-dd)\PMV_$(get-date -f yyyy-MM-dd).txt" -Value " "
+Add-Content -Path "D:\PMV\$(get-date -f yyyy-MM-dd)\PMV_$(get-date -f yyyy-MM-dd).txt" -Value "-------------------------------------------"
+Add-Content -Path "D:\PMV\$(get-date -f yyyy-MM-dd)\PMV_$(get-date -f yyyy-MM-dd).txt" -Value " "
+Add-Content -Path "D:\PMV\$(get-date -f yyyy-MM-dd)\PMV_$(get-date -f yyyy-MM-dd).txt" -Value "Beginning PMV"
+Add-Content -Path "D:\PMV\$(get-date -f yyyy-MM-dd)\PMV_$(get-date -f yyyy-MM-dd).txt" -Value " "
+# PMV output files: PMV. 
+
+# PMV output files: Tasks. 
+New-Item -ItemType "file" -Path "D:\PMV\$(get-date -f yyyy-MM-dd)" -Name ManualTasks_$(get-date -f yyyy-MM-dd).txt
+Add-Content -Path "D:\PMV\$(get-date -f yyyy-MM-dd)\ManualTasks_$(get-date -f yyyy-MM-dd).txt" -Value " "
+Add-Content -Path "D:\PMV\$(get-date -f yyyy-MM-dd)\ManualTasks_$(get-date -f yyyy-MM-dd).txt" -Value "-------------------------------------------"
+Add-Content -Path "D:\PMV\$(get-date -f yyyy-MM-dd)\ManualTasks_$(get-date -f yyyy-MM-dd).txt" -Value " "
+Add-Content -Path "D:\PMV\$(get-date -f yyyy-MM-dd)\ManualTasks_$(get-date -f yyyy-MM-dd).txt" -Value "Manual tasks $(get-date -f yyyy-MM-dd)"
+Add-Content -Path "D:\PMV\$(get-date -f yyyy-MM-dd)\ManualTasks_$(get-date -f yyyy-MM-dd).txt" -Value " "
+Add-Content -Path "D:\PMV\$(get-date -f yyyy-MM-dd)\ManualTasks_$(get-date -f yyyy-MM-dd).txt" -Value "-------------------------------------------"
+Add-Content -Path "D:\PMV\$(get-date -f yyyy-MM-dd)\ManualTasks_$(get-date -f yyyy-MM-dd).txt" -Value " "
+Add-Content -Path "D:\PMV\$(get-date -f yyyy-MM-dd)\ManualTasks_$(get-date -f yyyy-MM-dd).txt" -Value " "
+Add-Content -Path "D:\PMV\$(get-date -f yyyy-MM-dd)\ManualTasks_$(get-date -f yyyy-MM-dd).txt" -Value "Scripts are subject to server upgrades (i.e. server 2019):"
+# Manual tasks to be completed, this may change as automation progresses in the future.
+Write-Log -Message "Run tune tables" -Level "Task"
+Write-Log -Message "Run rebuild indexes" -Level "Task"
+# Cannot perfrom above tasks until every server runs on 2016 minimum
+Write-Log -Message "Check all scheduled tasks i.e. integrity check" -Level "Task"
+Add-Content -Path "D:\PMV\$(get-date -f yyyy-MM-dd)\ManualTasks_$(get-date -f yyyy-MM-dd).txt" -Value "Check all scheduled tasks i.e. integrity check"
+# Cannot perform above task until server set up is either standardised by confluence OR an automated set up that allows
+# scheduled tasks to be set up by powershell. NOTE: This cannot be done until every server runs on 2016 minimum.
+Add-Content -Path "D:\PMV\$(get-date -f yyyy-MM-dd)\ManualTasks_$(get-date -f yyyy-MM-dd).txt" -Value " "
+Add-Content -Path "D:\PMV\$(get-date -f yyyy-MM-dd)\ManualTasks_$(get-date -f yyyy-MM-dd).txt" -Value "Scripts are in development for tasks below:"
+# Scripts below are in development 
+Write-Log -Message "Check audit files" -Level "Task"
+Write-Log -Message "Check IIS logging" -Level "Task"
+Write-Log -Message "Organise and standardise file paths i.e. X_" -Level "Task"
+Write-Log -Message "Check Cache memory settings" -Level "Task"
+Add-Content -Path "D:\PMV\$(get-date -f yyyy-MM-dd)\ManualTasks_$(get-date -f yyyy-MM-dd).txt" -Value "Check audit files"
+Add-Content -Path "D:\PMV\$(get-date -f yyyy-MM-dd)\ManualTasks_$(get-date -f yyyy-MM-dd).txt" -Value "Check IIS logging"
+Add-Content -Path "D:\PMV\$(get-date -f yyyy-MM-dd)\ManualTasks_$(get-date -f yyyy-MM-dd).txt" -Value "Organise and standardise file paths i.e. X_"
+Add-Content -Path "D:\PMV\$(get-date -f yyyy-MM-dd)\ManualTasks_$(get-date -f yyyy-MM-dd).txt" -Value "Check Cache memory settings"
+# Scripts above are in development 
+Add-Content -Path "D:\PMV\$(get-date -f yyyy-MM-dd)\ManualTasks_$(get-date -f yyyy-MM-dd).txt" -Value " "
+Add-Content -Path "D:\PMV\$(get-date -f yyyy-MM-dd)\ManualTasks_$(get-date -f yyyy-MM-dd).txt" -Value "Scripts below are from the PMV:"
+# PMV output files: Tasks.
+
+# PMV begins with all tasks being completed in sequence, any errors are thrown to the logs. They must be checked post PMV
+Try{
+
+    # Server intensive tasks
+    # DO NOT EDIT -------------------------------------------------------
+    Write-Log -Message "Beginning PMV"
+    Write-Log -Message "---" -Level ---
+    Add-Content -Path "D:\PMV\$(get-date -f yyyy-MM-dd)\PMV_$(get-date -f yyyy-MM-dd).txt" -Value "CPU Usage:"
+    Get-CPUusage
+    Add-Content -Path "D:\PMV\$(get-date -f yyyy-MM-dd)\PMV_$(get-date -f yyyy-MM-dd).txt" -Value " "
+    Add-Content -Path "D:\PMV\$(get-date -f yyyy-MM-dd)\PMV_$(get-date -f yyyy-MM-dd).txt" -Value "RAM Usage:"
+    Get-RAMusage
+    Add-Content -Path "D:\PMV\$(get-date -f yyyy-MM-dd)\PMV_$(get-date -f yyyy-MM-dd).txt" -Value " "
+    # DO NOT EDIT -------------------------------------------------------
+
+
+    # Server tasks with outputs below ------------------------------------------------
+    Add-Content -Path "D:\PMV\$(get-date -f yyyy-MM-dd)\PMV_$(get-date -f yyyy-MM-dd).txt" -Value "Installed software:"
+    Get-InstalledSoftware
+    Add-Content -Path "D:\PMV\$(get-date -f yyyy-MM-dd)\PMV_$(get-date -f yyyy-MM-dd).txt" -Value " "
+    Add-Content -Path "D:\PMV\$(get-date -f yyyy-MM-dd)\PMV_$(get-date -f yyyy-MM-dd).txt" -Value "Database sizes:"
+    Get-DatabaseSizes
+    Add-Content -Path "D:\PMV\$(get-date -f yyyy-MM-dd)\PMV_$(get-date -f yyyy-MM-dd).txt" -Value " "
+    Add-Content -Path "D:\PMV\$(get-date -f yyyy-MM-dd)\PMV_$(get-date -f yyyy-MM-dd).txt" -Value "Drive memory:"
+    Get-DiskMemory
+    Add-Content -Path "D:\PMV\$(get-date -f yyyy-MM-dd)\PMV_$(get-date -f yyyy-MM-dd).txt" -Value " "
+    Add-Content -Path "D:\PMV\$(get-date -f yyyy-MM-dd)\PMV_$(get-date -f yyyy-MM-dd).txt" -Value "SIP details:"
+    Get-SIPTool
+    Add-Content -Path "D:\PMV\$(get-date -f yyyy-MM-dd)\PMV_$(get-date -f yyyy-MM-dd).txt" -Value " "
+    Add-Content -Path "D:\PMV\$(get-date -f yyyy-MM-dd)\PMV_$(get-date -f yyyy-MM-dd).txt" -Value "Cache key info:"
+    Get-CacheKeyInfo
+    Add-Content -Path "D:\PMV\$(get-date -f yyyy-MM-dd)\PMV_$(get-date -f yyyy-MM-dd).txt" -Value " "
+    # Server tasks with outputs above -------------------------------------------------
+
+    # Server tasks without outputs below ----------------------------------------------
+    Get-PCOMdetails
+    Get-cit1kBackups
+    Get-EventLogs
+    Clear-EventLogs
+    # Server tasks without outputs below ----------------------------------------------
+
+    # SQL statements below -----------------------------------------------
+    Add-Content -Path "D:\PMV\$(get-date -f yyyy-MM-dd)\PMV_$(get-date -f yyyy-MM-dd).txt" -Value "Active users:"
+    Get-ActiveUsers
+    Add-Content -Path "D:\PMV\$(get-date -f yyyy-MM-dd)\PMV_$(get-date -f yyyy-MM-dd).txt" -Value " "
+    Add-Content -Path "D:\PMV\$(get-date -f yyyy-MM-dd)\PMV_$(get-date -f yyyy-MM-dd).txt" -Value "Expire QC and test strips:"
+    Get-ExpiredQC_Test
+    Add-Content -Path "D:\PMV\$(get-date -f yyyy-MM-dd)\PMV_$(get-date -f yyyy-MM-dd).txt" -Value " "
+    Add-Content -Path "D:\PMV\$(get-date -f yyyy-MM-dd)\PMV_$(get-date -f yyyy-MM-dd).txt" -Value "Installed firmware versions:"
+    Get-FirmwareVersion
+    Add-Content -Path "D:\PMV\$(get-date -f yyyy-MM-dd)\PMV_$(get-date -f yyyy-MM-dd).txt" -Value " "
+    Add-Content -Path "D:\PMV\$(get-date -f yyyy-MM-dd)\PMV_$(get-date -f yyyy-MM-dd).txt" -Value "Instrument connectivity:"
+    Get-InstrumentConnectivity
+    Add-Content -Path "D:\PMV\$(get-date -f yyyy-MM-dd)\PMV_$(get-date -f yyyy-MM-dd).txt" -Value " "
+    Add-Content -Path "D:\PMV\$(get-date -f yyyy-MM-dd)\PMV_$(get-date -f yyyy-MM-dd).txt" -Value "Instrument events:"
+    Get-InstrumentEvents
+    Add-Content -Path "D:\PMV\$(get-date -f yyyy-MM-dd)\PMV_$(get-date -f yyyy-MM-dd).txt" -Value " "
+    Add-Content -Path "D:\PMV\$(get-date -f yyyy-MM-dd)\PMV_$(get-date -f yyyy-MM-dd).txt" -Value "ACB message broker monitor events:"
+    Get-MBMerrorsACB
+    Add-Content -Path "D:\PMV\$(get-date -f yyyy-MM-dd)\PMV_$(get-date -f yyyy-MM-dd).txt" -Value " "
+    Add-Content -Path "D:\PMV\$(get-date -f yyyy-MM-dd)\PMV_$(get-date -f yyyy-MM-dd).txt" -Value "HCA message broker monitor events:"
+    Get-MBMerrorsHCA
+    Add-Content -Path "D:\PMV\$(get-date -f yyyy-MM-dd)\PMV_$(get-date -f yyyy-MM-dd).txt" -Value " "
+    Add-Content -Path "D:\PMV\$(get-date -f yyyy-MM-dd)\PMV_$(get-date -f yyyy-MM-dd).txt" -Value "Patient results:"
+    Get-PatientResults
+    Add-Content -Path "D:\PMV\$(get-date -f yyyy-MM-dd)\PMV_$(get-date -f yyyy-MM-dd).txt" -Value " "
+    Add-Content -Path "D:\PMV\$(get-date -f yyyy-MM-dd)\PMV_$(get-date -f yyyy-MM-dd).txt" -Value "Unreviewed QC results:"
+    Get-UnreviewedQCresults
+    Add-Content -Path "D:\PMV\$(get-date -f yyyy-MM-dd)\PMV_$(get-date -f yyyy-MM-dd).txt" -Value " "
+    Add-Content -Path "D:\PMV\$(get-date -f yyyy-MM-dd)\PMV_$(get-date -f yyyy-MM-dd).txt" -Value "Unreviewed test results:"
+    Get-UnreviewedTestResults 
+    Add-Content -Path "D:\PMV\$(get-date -f yyyy-MM-dd)\PMV_$(get-date -f yyyy-MM-dd).txt" -Value " "
+    Add-Content -Path "D:\PMV\$(get-date -f yyyy-MM-dd)\PMV_$(get-date -f yyyy-MM-dd).txt" -Value "Unsynced instruments (Last 30 days):"           
+    Get-UnsyncedInstruments
+    Add-Content -Path "D:\PMV\$(get-date -f yyyy-MM-dd)\PMV_$(get-date -f yyyy-MM-dd).txt" -Value " "
+    Add-Content -Path "D:\PMV\$(get-date -f yyyy-MM-dd)\PMV_$(get-date -f yyyy-MM-dd).txt" -Value "Total ADT and result feeds:"
+    Get-ADTandResultFeeds
+    Add-Content -Path "D:\PMV\$(get-date -f yyyy-MM-dd)\PMV_$(get-date -f yyyy-MM-dd).txt" -Value " "
+    Add-Content -Path "D:\PMV\$(get-date -f yyyy-MM-dd)\PMV_$(get-date -f yyyy-MM-dd).txt" -Value "ADT incoming messages:"
+    Get-ADTMessages
+    Add-Content -Path "D:\PMV\$(get-date -f yyyy-MM-dd)\PMV_$(get-date -f yyyy-MM-dd).txt" -Value " "
+    Add-Content -Path "D:\PMV\$(get-date -f yyyy-MM-dd)\PMV_$(get-date -f yyyy-MM-dd).txt" -Value "Results incoming messages:"
+    Get-IncomingResults
+    Add-Content -Path "D:\PMV\$(get-date -f yyyy-MM-dd)\PMV_$(get-date -f yyyy-MM-dd).txt" -Value " "
+    Add-Content -Path "D:\PMV\$(get-date -f yyyy-MM-dd)\PMV_$(get-date -f yyyy-MM-dd).txt" -Value "Results outgoing messages:"
+    Get-OutGoingResults
+    Add-Content -Path "D:\PMV\$(get-date -f yyyy-MM-dd)\PMV_$(get-date -f yyyy-MM-dd).txt" -Value " "
+    Add-Content -Path "D:\PMV\$(get-date -f yyyy-MM-dd)\PMV_$(get-date -f yyyy-MM-dd).txt" -Value "Last date indexes rebuilt:"
+    Get-RebuildIndexes
+    Add-Content -Path "D:\PMV\$(get-date -f yyyy-MM-dd)\PMV_$(get-date -f yyyy-MM-dd).txt" -Value " "
+    Add-Content -Path "D:\PMV\$(get-date -f yyyy-MM-dd)\PMV_$(get-date -f yyyy-MM-dd).txt" -Value "Result ACK messages:"
+    Get-ResultACK
+    Add-Content -Path "D:\PMV\$(get-date -f yyyy-MM-dd)\PMV_$(get-date -f yyyy-MM-dd).txt" -Value " "
+    Add-Content -Path "D:\PMV\$(get-date -f yyyy-MM-dd)\PMV_$(get-date -f yyyy-MM-dd).txt" -Value "Task details (i.e. Warnings daemon):"
+    Get-Tasks
+    Add-Content -Path "D:\PMV\$(get-date -f yyyy-MM-dd)\PMV_$(get-date -f yyyy-MM-dd).txt" -Value " "
+    Add-Content -Path "D:\PMV\$(get-date -f yyyy-MM-dd)\PMV_$(get-date -f yyyy-MM-dd).txt" -Value "Last date tune tables complete:"
+    Get-TuneTable
+    Add-Content -Path "D:\PMV\$(get-date -f yyyy-MM-dd)\PMV_$(get-date -f yyyy-MM-dd).txt" -Value " "
+    # SQL statements above -----------------------------------------------
+
+    # Long running task --------------------
+    Add-Content -Path "D:\PMV\$(get-date -f yyyy-MM-dd)\PMV_$(get-date -f yyyy-MM-dd).txt" -Value "Windows update details:"
+    Get-DiskData
+    Add-Content -Path "D:\PMV\$(get-date -f yyyy-MM-dd)\PMV_$(get-date -f yyyy-MM-dd).txt" -Value " "
+    # Long running task --------------------
+
+} Catch {
+    Write-Log -Message "---" -Level ---
+    Write-Log -Message "Error with PMV tasks, PMV.ps1" -Level "Error"
+    Write-Log -Message "---" -Level ---
+    Write-Error -Message "Error with PMV tasks" 
+}
+
+Write-Log -Message "Finishing PMV" 
